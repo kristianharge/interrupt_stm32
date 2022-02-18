@@ -23,7 +23,9 @@ Hardware interrupts can arrive asynchronously with respect to the processor cloc
 
 There are 16 external interrupt lines with separate interrupt vector addresses that are connected with GPIO pins. Thus there are 16 multiplexers connected to the NVIC and are named as External Interrupt/Event Controllers, EXTI0, EXTI1, etc. up to EXTI15. GPIO pins of the same order are grouped together and connected to an EXTI channel. For instance EXTI1 is connected to PA1, PB1, etc. and not like PA0, PA1, etc. This is why at any given instance we can have an external interrupt in only one of connected GPIO pins of that EXTI mux. For example when we need to use EXTI2, we can use either PA2, PB2, PC2, etc. but not PA2, PB2, etc. simultaneously. Thus an entire GPIO port or port pins from different GPIO ports can be configured as external interrupts. Interrupts in all pins is an unnecessary stuff. We can also decide when to sense an interrupt – on rising/falling or both edges. All these settings are separately stored, allowing high flexibility.[^2]
 
-### HAL library interrupts
+### HAL library interrupts and timers
+
+#### Interrupts
 
 How to use the interrups with the HAL library[^3]:
 
@@ -44,16 +46,109 @@ using HAL_NVIC_SetPriority() and enable it using HAL_NVIC_EnableIRQ().
 unconfigure pin which was used as an external interrupt or in event mode. That's the only way to reset
 corresponding bit in EXTI & SYSCFG registers.
 
+#### Timers
+
+How to use the timers with the HAL library[^3]:
+
+1. Initialize the TIM low level resources by implementing the following functions depending from feature used :
+- Time Base : HAL_TIM_Base_MspInit()
+- Input Capture : HAL_TIM_IC_MspInit()
+- Output Compare : HAL_TIM_OC_MspInit()
+- PWM generation : HAL_TIM_PWM_MspInit()
+- One-pulse mode output : HAL_TIM_OnePulse_MspInit()
+- Encoder mode output : HAL_TIM_Encoder_MspInit()
+2. Initialize the TIM low level resources :
+a. Enable the TIM interface clock using __HAL_RCC_TIMx_CLK_ENABLE();
+b. TIM pins configuration
+- Enable the clock for the TIM GPIOs using the following function: __HAL_RCC_GPIOx_CLK_ENABLE();
+- Configure these TIM pins in Alternate function mode using HAL_GPIO_Init();
+3. The external Clock can be configured, if needed (the default clock is the internal clock from the APBx), using
+the following function: HAL_TIM_ConfigClockSource, the clock configuration should be done before any
+start function.
+4. Configure the TIM in the desired functioning mode using one of the Initialization function of this driver:
+- HAL_TIM_Base_Init: to use the Timer to generate a simple time base
+- HAL_TIM_OC_Init and HAL_TIM_OC_ConfigChannel: to use the Timer to generate an Output
+Compare signal.
+- HAL_TIM_PWM_Init and HAL_TIM_PWM_ConfigChannel: to use the Timer to generate a PWM signal.
+- HAL_TIM_IC_Init and HAL_TIM_IC_ConfigChannel: to use the Timer to measure an external signal.
+- HAL_TIM_OnePulse_Init and HAL_TIM_OnePulse_ConfigChannel: to use the Timer in One Pulse
+Mode.
+- HAL_TIM_Encoder_Init: to use the Timer Encoder Interface.
+5. Activate the TIM peripheral using one of the start functions depending from the feature used:
+- Time Base : HAL_TIM_Base_Start(), HAL_TIM_Base_Start_DMA(), HAL_TIM_Base_Start_IT()
+- Input Capture : HAL_TIM_IC_Start(), HAL_TIM_IC_Start_DMA(), HAL_TIM_IC_Start_IT()
+- Output Compare : HAL_TIM_OC_Start(), HAL_TIM_OC_Start_DMA(), HAL_TIM_OC_Start_IT()
+- PWM generation : HAL_TIM_PWM_Start(), HAL_TIM_PWM_Start_DMA(), HAL_TIM_PWM_Start_IT()
+- One-pulse mode output : HAL_TIM_OnePulse_Start(), HAL_TIM_OnePulse_Start_IT()
+- Encoder mode output : HAL_TIM_Encoder_Start(), HAL_TIM_Encoder_Start_DMA(),
+HAL_TIM_Encoder_Start_IT().
+6. The DMA Burst is managed with the two following functions: HAL_TIM_DMABurst_WriteStart()
+HAL_TIM_DMABurst_ReadStart()
+
 ## Functionnal overview of the code
 
 ### Where to find the code
 
-### How is built the library and how to use it
+The whole project was added to this git repository is a complete project initialized from STM32CUBEIDE. I used this in order to test the compilation of the library, but they are only two files that are important to respond to the assignment. They are **GPIO_interrupt_callback_dispatch.c** and **GPIO_interrupt_callback_dispatch.h** and can be found in the **Library** folder.
+
+### How to use the library
+
+There are 3 importants steps to follow to use the library:
+
+1. Initialize the GPIO interrupts:
+In order to initialize the GPIO interrupts, I created the following function:
+```c
+void initGpioInterrupt(uint16_t GPIOPin, uint32_t triggerMode, uint32_t PreemptPriority, uint32_t SubPriority);
+```
+This function allows the initialization of interrupts on a specific pin with a configurable triggerMode and priority.
+
+2. Initialize the debounce filter:
+In order to initialize the debounce filter, I created the following function:
+```c
+int debounceFilterTimerInit(uint16_t period_us);
+```
+This function allows us to configure the period of the debounce filter in microseconds.
+
+3. Add your callback function:
+In order to add you callback function, I created the following function:
+```c
+int createCallback(uint16_t GPIOPin, void (*callback)(void));
+```
+This function allows to add a previously defined callback function to the specified GPIO pin.
+
+### How is built the library
+
+Basically what our code does is that it creates an interupt thanks to the HAL library, and when the interrupt occurs, it launches a timer that will elapse after a previously set period and then execute the callback function.
+
+To handle the callback functions, I created an array of 16 function pointers that contains the function pointes of their relative callback function. We can access to the callback function by using the GPIO pin number as array index.
+
+*Exampe:*
+```c
+//the array declaration
+static void (*callback_func[NUM_GPIOS])(void);
+//To access the gpio pin 15
+callback_func[15];
+```
+
+I also added a bool array (`static bool enabled_callbacks[NUM_GPIOS];`) that contains all the GPIO pins that have an enabled callback function, this avoids calling a callback function if the interupt was enabled but not the callback function.
+
+So to enable a callback function, the only thing that we do is to copy the function pointer to our `callback_func` array and set the callback as enabled to the `enabled_callbacks` array.
+
+When an interruption arrives, the `EXTIN_M_IRQHandler` function is called (N_M can be 0_1 for pins 0 and 1, 2_3 for pins 2 and 3 and 4_15 for pins 4 to 15). This function has the task of launching the timer with the previously set period and disabling the interrupt.
+
+Once the timer elapsed, we execute the callback function and re enable the interrupt.
 
 ## Requirements and notes
 
+#### Requirements:
+- Install STM32CUBEIDE
+- Start a project with the STM32F030C6Tx microcontroller selected
+- Enable de HAL library
+
+#### Notes
 - The targeted device is an STM32F030C6Tx
 - The code was developed using the HAL libraries developed by ST and available in STM32CUBEIDE
+- I did not had the hardware to effectively test this library so it is something to be done before considering the library as functionnal
 
 ## Bibliography
 

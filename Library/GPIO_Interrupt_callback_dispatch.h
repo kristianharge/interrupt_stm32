@@ -37,10 +37,10 @@ void initGpioInterrupt(uint16_t GPIOPin, uint32_t triggerMode, uint32_t PreemptP
 //~ ----------------------------
 //~ Initialize the debounce filter timer
 //~
-//~ input : uint32_t period_us; the period of the debounce filter
+//~ input : uint16_t period_us; the period of the debounce filter
 //~
 //~ output : int -1 if error, 1 if success
-int debounceFilterTimerInit(uint32_t period_us);
+int debounceFilterTimerInit(uint16_t period_us);
 
 //~ Function : createCallback
 //~ ----------------------------

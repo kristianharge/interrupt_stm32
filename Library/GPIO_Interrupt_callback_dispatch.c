@@ -25,8 +25,6 @@ static uint16_t gpiopins[NUM_GPIOS] = {
  GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7,
  GPIO_PIN_8, GPIO_PIN_9, GPIO_PIN_10, GPIO_PIN_11, GPIO_PIN_12, GPIO_PIN_13, GPIO_PIN_14, GPIO_PIN_15
 };
-//an array containing the trigger mode of the gpios. 0 -> rising edge, 1 -> falling edge, 2 -> both, the index is the gpio number
-static uint8_t  trigger_mode[NUM_GPIOS];
 //the timer hanle
 static TIM_HandleTypeDef htim1;
 
@@ -80,11 +78,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	UNUSED(htim);
 
-	for(int i = 2; i < NUM_GPIOS; i++){
+	for(int i = 0; i < NUM_GPIOS; i++){
 		if(enabled_callbacks[i]){
 			if(__HAL_GPIO_EXTI_GET_FLAG(gpiopins[i])){
-				(*callback_func)();
 				HAL_GPIO_EXTI_IRQHandler(gpiopins[i]);
+				(*callback_func)();
 			}
 		}
 	}
@@ -128,26 +126,16 @@ void initGpioInterrupt(uint16_t GPIOPin, uint32_t triggerMode, uint32_t PreemptP
 		HAL_NVIC_EnableIRQ(EXTI0_1_IRQn);
 	}// end enable the interruption
 
-	//set the trigger mode
-	if(triggerMode == GPIO_MODE_IT_RISING){
-		trigger_mode[GPIOPin] = TRIGGER_MODE_RISING;
-	}
-	else if(triggerMode == GPIO_MODE_IT_FALLING){
-		trigger_mode[GPIOPin] = TRIGGER_MODE_FALLING;
-	}
-	else if(triggerMode == GPIO_MODE_IT_RISING_FALLING){
-		trigger_mode[GPIOPin] = TRIGGER_MODE_BOTH;
-	}// end set the trigger mode
 }// end function init_GPIO_interrupt
 
 //~ Function : debounceFilterTimerInit
 //~ ----------------------------
 //~ Initialize the debounce filter timer
 //~
-//~ input : uint32_t period_us; the period of the debounce filter
+//~ input : uint16_t period_us; the period of the debounce filter
 //~
 //~ output : int -1 if error, 1 if success
-int debounceFilterTimerInit(uint32_t period_us){
+int debounceFilterTimerInit(uint16_t period_us){
 	TIM_ClockConfigTypeDef sClockSourceConfig = {0};
 	TIM_MasterConfigTypeDef sMasterConfig = {0};
 
